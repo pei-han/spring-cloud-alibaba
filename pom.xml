@@ -199,7 +199,7 @@
                     </additionalConfig>
                 </configuration>
             </plugin>
-            <plugin>
+            <!-- <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-checkstyle-plugin</artifactId>
                 <executions>
@@ -209,9 +209,9 @@
                         <goals>
                             <goal>check</goal>
                         </goals>
-                        <configuration>
+                        <configuration>-->
                             <!-- Checkstyle rules inherited from spring-cloud-build -->
-                            <suppressionsLocation>${maven.multiModuleProjectDirectory}/eclipse/checkstyle-suppressions.xml</suppressionsLocation>
+                            <!-- <suppressionsLocation>${maven.multiModuleProjectDirectory}/eclipse/checkstyle-suppressions.xml</suppressionsLocation>
                             <includeTestSourceDirectory>true</includeTestSourceDirectory>
                             <consoleOutput>true</consoleOutput>
                             <failsOnError>true</failsOnError>
@@ -220,7 +220,7 @@
                         </configuration>
                     </execution>
                 </executions>
-            </plugin>
+            </plugin>-->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>

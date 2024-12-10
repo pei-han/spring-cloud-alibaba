@@ -16,38 +16,6 @@
 
 package com.alibaba.cloud.nacos;
 
-import java.net.Inet4Address;
-import java.net.Inet6Address;
-import java.net.InetAddress;
-import java.net.NetworkInterface;
-import java.util.Enumeration;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Properties;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-import javax.annotation.PostConstruct;
-
-import com.alibaba.cloud.commons.lang.StringUtils;
-import com.alibaba.cloud.nacos.event.NacosDiscoveryInfoChangedEvent;
-import com.alibaba.cloud.nacos.util.InetIPv6Utils;
-import com.alibaba.nacos.api.naming.NamingService;
-import com.alibaba.nacos.api.naming.PreservedMetadataKeys;
-import com.alibaba.nacos.client.naming.utils.UtilAndComs;
-import com.alibaba.spring.util.PropertySourcesUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.cloud.commons.util.InetUtils;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.core.env.ConfigurableEnvironment;
-import org.springframework.core.env.Environment;
-
 import static com.alibaba.nacos.api.PropertyKeyConst.ACCESS_KEY;
 import static com.alibaba.nacos.api.PropertyKeyConst.ENDPOINT;
 import static com.alibaba.nacos.api.PropertyKeyConst.ENDPOINT_PORT;
@@ -57,6 +25,40 @@ import static com.alibaba.nacos.api.PropertyKeyConst.PASSWORD;
 import static com.alibaba.nacos.api.PropertyKeyConst.SECRET_KEY;
 import static com.alibaba.nacos.api.PropertyKeyConst.SERVER_ADDR;
 import static com.alibaba.nacos.api.PropertyKeyConst.USERNAME;
+
+import java.net.Inet4Address;
+import java.net.Inet6Address;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Properties;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import javax.annotation.PostConstruct;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.cloud.commons.util.InetUtils;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.core.env.ConfigurableEnvironment;
+import org.springframework.core.env.Environment;
+
+import com.alibaba.cloud.commons.lang.StringUtils;
+import com.alibaba.cloud.nacos.event.NacosDiscoveryInfoChangedEvent;
+import com.alibaba.cloud.nacos.util.InetIPv6Utils;
+import com.alibaba.nacos.api.naming.NamingService;
+import com.alibaba.nacos.api.naming.PreservedMetadataKeys;
+import com.alibaba.nacos.client.naming.utils.UtilAndComs;
+import com.alibaba.spring.util.PropertySourcesUtils;
 
 /**
  * @author dungu.zpf
@@ -264,6 +266,7 @@ public class NacosDiscoveryProperties {
 		if (StringUtils.isEmpty(ip)) {
 			// traversing network interfaces if didn't specify an interface
 			if (StringUtils.isEmpty(networkInterface)) {
+				// if ip and network-interface properties are not specified,bind the type of ipType property
 				if (ipType == null) {
 					ip = inetUtils.findFirstNonLoopbackHostInfo().getIpAddress();
 					String ipv6Addr = inetIPv6Utils.findIPv6Address();
@@ -295,16 +298,9 @@ public class NacosDiscoveryProperties {
 							"no such interface " + networkInterface);
 				}
 
-				Enumeration<InetAddress> inetAddress = netInterface.getInetAddresses();
-				while (inetAddress.hasMoreElements()) {
-					InetAddress currentAddress = inetAddress.nextElement();
-					if (currentAddress instanceof Inet4Address
-							|| currentAddress instanceof Inet6Address
-							&& !currentAddress.isLoopbackAddress()) {
-						ip = currentAddress.getHostAddress();
-						break;
-					}
-				}
+				List<InetAddress> inetAddress = Collections.list(netInterface.getInetAddresses());
+				
+				ipAddressByIpType(inetAddress);
 
 				if (StringUtils.isEmpty(ip)) {
 					throw new RuntimeException("cannot find available ip from"
@@ -322,6 +318,63 @@ public class NacosDiscoveryProperties {
 		nacosServiceManager.setNacosDiscoveryProperties(this);
 	}
 
+	public String ipv4Address(List<InetAddress> inetAddress) {
+		Iterator<InetAddress> it = inetAddress.iterator();
+		while (it.hasNext()) {
+			InetAddress currentAddress = it.next();
+			if (currentAddress instanceof Inet4Address
+					&& !currentAddress.isLoopbackAddress()) {
+				return currentAddress.getHostAddress();
+			}
+		}
+		return null;
+	}
+	
+	public String ipv6Address(List<InetAddress> inetAddress) {
+		Iterator<InetAddress> it = inetAddress.iterator();
+		while (it.hasNext()) {
+			InetAddress currentAddress = it.next();
+			if (currentAddress instanceof Inet6Address
+					&& !currentAddress.isLoopbackAddress()) {
+				return currentAddress.getHostAddress();
+			}
+		}
+		return null;
+	}
+	
+	/**
+	 * set ip depend on ipType
+	 * @param inetAddress ipv4 ipv6
+	 * @return
+	 */
+	public String ipAddressByIpType(List<InetAddress> inetAddress) {
+
+		if (ipType == null) {
+			ip = ipv4Address(inetAddress);
+			String ipv6Addr = ipv6Address(inetAddress);
+			metadata.put(IPV6, ipv6Addr);
+			if (ipv6Addr != null) {
+				metadata.put(IPV6, ipv6Addr);
+			}
+		}
+		else if (IPV4.equalsIgnoreCase(ipType)) {
+			ip = ipv4Address(inetAddress);
+		}
+		else if (IPV6.equalsIgnoreCase(ipType)) {
+			ip = ipv6Address(inetAddress);
+			if (StringUtils.isEmpty(ip)) {
+				log.warn("There is no available IPv6 found. Spring Cloud Alibaba will automatically find IPv4.");
+				ip = ipv4Address(inetAddress);
+			}
+		}
+		else {
+			throw new IllegalArgumentException(
+					"please checking the type of IP " + ipType);
+		}
+	
+		return ip;
+	}
+	
 	/**
 	 * recommend to use {@link NacosServiceManager#getNamingService()}.
 	 * @return NamingService
